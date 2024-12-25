@@ -1,0 +1,192 @@
+%Using this script, the migration data of cells from ImageJ by the 'trackmate' plugin can be transformed. 3 lists would be output.
+%List 1 is the basic statistics of cell migration. The 1st column is the name of the original file. The 2nd column is average migration angle. The 3rd column is the average migration distance. Average migration speed should be calculated based on this column according to the time interval used. The 4th column is the average migration angle weighted by migration distance of each interval.
+%List 2 is the square of displacement of each cell. The displacement was calculated using the original point as the reference point.
+%List 3 is the coordinates normalized to the starting point of each cell. The list can be directly copied and pasted into GraphPad to generate stacked cell migration tracks. The default factor is 1.61, which is used to transform distance in pixel to um.
+%When this script is applied to different applications, the unit of length and time should be processed carefully.
+%
+%Close the software window and clear running records
+clear;
+close all;
+clc;
+%Read the original data in batches
+selpath = uigetdir;%Choose the folder path to be treated
+path  = selpath;
+Filesname=dir(strcat(path,'/*.csv')); 
+n=length(Filesname); %Here, n stands for the number of files in the folder 
+fileNames={Filesname.name};%Save all the file names as a matrix
+fileNames=transpose(fileNames);%Transpose the matrix
+x=char(fileNames(1,1));%Read the first file
+z1=readmatrix(strcat(path,'/',x),'Range','A2:G21'); %Read the first .csv file and name it as z1
+z1=z1(:,2:5);%Because only data of time point number (No. 2 column), x coordinate (No. 3 column), y coordinate (No. 4 column) and migration distance in this time interval (No. 5 column) are needed, so this line of code is to transform z1 to a table only containing data from No. 2-5 column.
+
+
+%%%%%%%%%%%%% Basic migration statistics - List 1 %%%%%%%%%%%%%%
+%Define variables
+k=1;
+count=0;
+for k=1:size(z1,1)-1
+    deltax = abs(z1(k+1,2)-abs(z1(k,2)));
+    deltay = abs(z1(k+1,3)-abs(z1(k,3)));
+    if (deltax == 0 && deltay == 0)
+        angle(k) = 0;
+        count = count+1;
+    else
+        angle(k) = asin(deltay/sqrt((deltax)^2+(deltay)^2))*(180/3.1415926);
+    end
+end
+Angle=transpose(angle);
+N = nnz(angle);%To confirm the number of non-zero factor in migration angle
+L1 = fileNames;
+L2 = sum(angle)/(19-count);
+L3 = mean(z1(2:size(z1,1),4));
+L4 = sum(Angle.*z1(2:size(z1,1),4))/sum(z1(2:size(z1,1),4));
+
+%Use circulation to read all the data in the folder path
+for i=1:n-1
+    count=0;
+    for j=1:size(z1,1)-1%Read the row number of matrix z
+        x=Filesname(i+1).name; %Read the names of latter files in sequence
+        z=readmatrix(strcat(path,'/',x),'Range','A2:G21'); %Read .csv files in the folder path orderly. The data range is defined with A2 as the top left corner and G21 as the bottom right corner
+        z=z(:,2:5); %Extract the data of No. 2-5 column from matrix z
+        
+        %Calculate the migration angle of each time point
+        deltax = abs(z(j+1,2)-abs(z(j,2)));
+        deltay = abs(z(j+1,3)-abs(z(j,3)));
+        if (deltax == 0 && deltay == 0)
+            angle2(j) = 0;
+            count = count+1;
+        else
+            angle2(j) = asin(deltay/sqrt((deltax)^2+(deltay)^2))*(180/3.1415926);
+        end
+    %The data from the second column is average migration angle. (The first time point and no-moving point are not calculated)
+    avangle = sum(angle2)/(19-count);
+ end
+    Angle = [Angle,transpose(angle2)];%Joint the angle data just calculated to the right of existing data
+     
+    %The first column is file names
+    L1 = fileNames;
+    
+    %The second column is average migration angle. (The first time point and no-moving point are not calculated)
+    L2 = [L2,avangle];
+    
+    %The third column is average migration distance
+    L3 = [L3,mean(z(2:size(z1,1),4))];
+    
+    %The fourth column is migration angle weighted by migration distance
+    L4 = [L4,sum(transpose(angle2).*z(2:size(z1,1),4))/sum(z(2:size(z1,1),4))];
+    
+    %The following 2 lines are used to show the progress bar of the running code. Sometimes the code can run for very long time because too many files are processed at the same time, so it can be used to know the progress. (Unnecessary code. These two lines can be deleted.)
+    Dis=strcat('当前进度 ',int2str(i/n*100),'%');
+    disp(Dis)
+end
+%Output data
+  %Transform the format
+  L2 = num2cell(L2);
+  L3 = num2cell(L3);
+  L4 = num2cell(L4);
+  %Transpose matrix z
+  L2 = transpose (L2);
+  L3 = transpose (L3);
+  L4 = transpose (L4);
+  List1 = [L1 L2 L3 L4];
+  xlswrite(strcat(path,'/List1'),List1);
+  
+  
+  
+  
+  %%%%%%%%%%%% Square of displacement-List 2 %%%%%%%%%%%%
+  %The header of the table
+  Title=["Timepoint",transpose(fileNames)];
+  
+  %Read the original files in batches
+  x=char(fileNames(1,1));%Read the first file
+  z1=readmatrix(strcat(path,'/',x),'Range','A2:G21'); %Read the first .csc file and name it as z
+  z1=z1(:,2:5);%Because only the data of time point (No. 2 column), x coordinate (No. 3 column), y coordinate (No. 4 column) and migration distance (No. 5 column) are needed, so this line of code is used to transform matrix z to a table only containing data from No. 2-5 column.
+
+  %Define variables
+k=1;
+for k=1:size(z1,1)-1
+    deltax = z1(k+1,2)-z1(k,2);
+    deltay = z1(k+1,3)-z1(k,3);
+    length(k) = sqrt((deltax)^2+(deltay)^2);
+end
+Length=transpose(length);
+
+%Use circulation to read every data file in the folder path
+for i=1:n-1
+    for j=1:size(z1,1)-1%Read the number of rows in matrix z
+        x=Filesname(i+1).name; %Read the names of latter files
+        z=readmatrix(strcat(path,'/',x),'Range','A2:G21'); %Read .csv files in the folder path orderly. The data range is defined with A2 as the top left corner and G21 as the bottom right corner
+
+        z=z(:,2:5); %Extract the data of No. 2-4 column from matrix z
+        
+        %Calculate the displacement of each time point.
+        deltax = z(j+1,2)-z(j,2);
+        deltay = z(j+1,3)-z(j,3);
+        length2(j) = sqrt((deltax)^2+(deltay)^2);
+    end
+    Length = [Length,transpose(length2)];%Joint the displacement data just calculated to the right of existing data
+end
+ 
+ %Generate the second list by jointing
+ List2(1,:) = Title;
+ List2(2:size(z),1) = (2:20);
+ List2(2:size(z),2:n+1) = Length;
+ %Remove default values
+ List2 = string(List2);
+ List2 = List2(1:20,1:n+1);
+ 
+ %Output data
+ xlswrite(strcat(path,'/List2'),List2);
+ 
+ 
+ %%%%%%%%%%%% Cell coordinate-List 3 %%%%%%%%%%%%
+ %The header of the table
+  Title=["X",transpose(fileNames)];
+  
+  %Read the original files in batches
+  x=char(fileNames(1,1));%Read the first file
+  z1=readmatrix(strcat(path,'/',x),'Range','A2:G21'); %Read the first .csv file and name it as z
+  z1=z1(:,2:5);%Because only data of time point number (No. 2 column), x coordinate (No. 3 column), y coordinate (No. 4 column) and migration distance in this time interval (No. 5 column) are needed, so this line of code is to transform z1 to a table only containing data from No. 2-5 column.
+
+  
+  %Define variables
+k=1;
+for k=1:size(z1,1)
+    deltax = z1(k,2)-z1(1,2);
+    deltay = z1(k,3)-z1(1,3);
+    newx(k) = 1.61 * deltax;
+    newy(k) = 1.61 * deltay;
+end
+Newx = transpose(newx);
+Newy = transpose(newy);
+
+%Use circulation to read every file in the folder path
+for i=1:n-1
+    for j=1:size(z1,1)%Read the number of rows in matrix z
+        x=Filesname(i+1).name; %Read the name of every latter file
+        z=readmatrix(strcat(path,'/',x),'Range','A2:G21'); %Read .csv files in the folder path orderly. The data range is defined with A2 as the top left corner and G21 as the bottom right corner
+        z=z(:,2:5); %Extract data of No. 2-5 column from matrix z
+        
+        %Calculate the distance change of each time point
+        deltax = z(j,2)-z(1,2);
+        deltay = z(j,3)-z(1,3);
+        newx2(j) = 1.61 * deltax;
+        newy2(j) = 1.61 * deltay;
+    end
+    Newx = [Newx;transpose(newx2)];%Joint the normalized x coordinate to the right of existing data
+    Newy = [Newy,transpose(newy2)];%Joint the normalized y coordinate to the right of existing data
+end
+    
+    %Generate the third list by jointing
+    List3(1,:) = Title;
+    List3(2:20*n+1,1) = Newx;
+    
+    for m=1:n
+        List3(20*m-18:20*m+1,m+1) = Newy(:,m);
+    end
+ 
+ %Output data
+ xlswrite(strcat(path,'/List3'),List3);
+ 
+ 
